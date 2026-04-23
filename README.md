@@ -2,7 +2,7 @@
 
 A [Viam](https://viam.com/) audio input module that extracts the audio track from a local video file and exposes it as a virtual `audio_in` component. It uses `ffmpeg` to decode the video's audio stream in real time and streams PCM16 `AudioChunk`s through Viam's audio_in API, looping back to the beginning when the video ends. Useful for testing and development (paired with [video-replay](https://github.com/dmhilly/viam-video-replay), you can simulate a camera + mic from a single video file).
 
-## Model: `martha-johnston:audio-replay:audio`
+## Model: `devin-hilly:audio-replay:audio`
 
 ### Requirements
 
@@ -34,7 +34,7 @@ A [Viam](https://viam.com/) audio input module that extracts the audio track fro
     {
       "name": "my-replay-audio",
       "api": "rdk:component:audio_in",
-      "model": "martha-johnston:audio-replay:audio",
+      "model": "devin-hilly:audio-replay:audio",
       "attributes": {
         "video_path": "/home/user/videos/test.mp4",
         "sample_rate": 48000,
@@ -45,8 +45,8 @@ A [Viam](https://viam.com/) audio input module that extracts the audio track fro
   "modules": [
     {
       "type": "registry",
-      "name": "martha-johnston_audio-replay",
-      "module_id": "martha-johnston:audio-replay",
+      "name": "devin-hilly_audio-replay",
+      "module_id": "devin-hilly:audio-replay",
       "version": "latest"
     }
   ]

@@ -1,15 +1,15 @@
 {
   "$schema": "https://dl.viam.dev/module.schema.json",
-  "module_id": "martha-johnston:audio-replay",
+  "module_id": "devin-hilly:audio-replay",
   "visibility": "public",
   "url": "https://github.com/martha-johnston/viam-audio-replay",
   "description": "An implementation of a custom Viam AudioIn component that replays the audio track of a video file. The audio_in component uses ffmpeg to extract audio from a video file and stream it as PCM16 chunks upon request.",
   "models": [
     {
       "api": "rdk:component:audio_in",
-      "model": "martha-johnston:audio-replay:audio",
+      "model": "devin-hilly:audio-replay:audio",
       "short_description": "Replays the audio track of a local video file as a virtual audio input, looping at native rate.",
-      "markdown_link": "README.md#model-martha-johnstonaudio-replayaudio"
+      "markdown_link": "README.md#model-devin-hillyaudio-replayaudio"
     }
   ],
   "entrypoint": "bin/audio-replay",

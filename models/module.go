@@ -16,7 +16,7 @@ import (
 )
 
 // Our audio model
-var Audio = resource.NewModel("martha-johnston", "audio-replay", "audio")
+var Audio = resource.NewModel("devin-hilly", "audio-replay", "audio")
 
 const (
 	chunkDurationMs    = 100
