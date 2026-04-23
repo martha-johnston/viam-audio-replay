@@ -40,6 +40,10 @@ type Config struct {
 	VideoPath   string `json:"video_path"`
 	SampleRate  int32  `json:"sample_rate,omitempty"`
 	NumChannels int32  `json:"num_channels,omitempty"`
+	// AutoStart controls whether the ffmpeg stream starts automatically on
+	// construction. When false, the component sits idle until a DoCommand
+	// {"command": "start"} is received. Defaults to true.
+	AutoStart *bool `json:"auto_start,omitempty"`
 }
 
 // Validate ensures VideoPath is set
@@ -105,13 +109,24 @@ func newAudioReplayAudio(
 		subscribers: map[int]chan *audioin.AudioChunk{},
 	}
 
-	if err := a.openAndStartLoop(conf); err != nil {
-		cancelFunc()
-		return nil, fmt.Errorf("failed to start ffmpeg at creation: %w", err)
+	if autoStart(conf) {
+		if err := a.openAndStartLoop(conf); err != nil {
+			cancelFunc()
+			return nil, fmt.Errorf("failed to start ffmpeg at creation: %w", err)
+		}
+	} else {
+		logger.Infof("[newAudioReplayAudio] auto_start=false; waiting for DoCommand start")
 	}
 
 	logger.Infof("[newAudioReplayAudio] AudioIn constructed successfully: %q", a.name)
 	return a, nil
+}
+
+func autoStart(conf *Config) bool {
+	if conf.AutoStart == nil {
+		return true
+	}
+	return *conf.AutoStart
 }
 
 // openAndStartLoop launches ffmpeg to extract PCM16 audio from the video,
@@ -295,7 +310,9 @@ func (a *audioReplayAudio) Properties(ctx context.Context, extra map[string]inte
 	}, nil
 }
 
-// Reconfigure changes the video by always stopping and restarting ffmpeg.
+// Reconfigure updates stored config and restarts the ffmpeg stream only if
+// it was already running (so an explicit "stop" via DoCommand survives a
+// reconfigure). Stopped streams respect auto_start on the new config.
 func (a *audioReplayAudio) Reconfigure(
 	ctx context.Context,
 	deps resource.Dependencies,
@@ -308,10 +325,18 @@ func (a *audioReplayAudio) Reconfigure(
 		return err
 	}
 
-	if err := a.openAndStartLoop(newConf); err != nil {
-		return fmt.Errorf("reconfigure: %w", err)
-	}
+	a.procMutex.Lock()
+	wasRunning := a.ffmpegCmd != nil
+	a.procMutex.Unlock()
+
 	a.cfg = newConf
+
+	shouldRun := wasRunning || (!wasRunning && autoStart(newConf))
+	if shouldRun {
+		if err := a.openAndStartLoop(newConf); err != nil {
+			return fmt.Errorf("reconfigure: %w", err)
+		}
+	}
 	return nil
 }
 
@@ -330,12 +355,42 @@ func (a *audioReplayAudio) Status(ctx context.Context) (map[string]interface{}, 
 	return map[string]interface{}{}, nil
 }
 
-// DoCommand is not supported.
+// DoCommand supports three commands:
+//
+//	{"command": "start"}  — (re)starts ffmpeg; no-op if already running.
+//	{"command": "stop"}   — stops ffmpeg if running.
+//	{"command": "status"} — returns {"running": bool}.
 func (a *audioReplayAudio) DoCommand(
 	ctx context.Context,
 	cmd map[string]interface{},
 ) (map[string]interface{}, error) {
-	return nil, fmt.Errorf("do command not supported")
+	command, _ := cmd["command"].(string)
+	switch command {
+	case "start":
+		a.procMutex.Lock()
+		already := a.ffmpegCmd != nil
+		a.procMutex.Unlock()
+		if already {
+			return map[string]interface{}{"running": true, "was_running": true}, nil
+		}
+		if err := a.openAndStartLoop(a.cfg); err != nil {
+			return nil, fmt.Errorf("start failed: %w", err)
+		}
+		return map[string]interface{}{"running": true, "was_running": false}, nil
+	case "stop":
+		a.procMutex.Lock()
+		wasRunning := a.ffmpegCmd != nil
+		a.stopFFmpegLocked()
+		a.procMutex.Unlock()
+		return map[string]interface{}{"running": false, "was_running": wasRunning}, nil
+	case "status":
+		a.procMutex.Lock()
+		running := a.ffmpegCmd != nil
+		a.procMutex.Unlock()
+		return map[string]interface{}{"running": running}, nil
+	default:
+		return nil, fmt.Errorf("unknown command %q; expected one of: start, stop, status", command)
+	}
 }
 
 // Close cleans up on resource removal.
