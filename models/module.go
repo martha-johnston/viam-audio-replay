@@ -40,10 +40,6 @@ type Config struct {
 	VideoPath   string `json:"video_path"`
 	SampleRate  int32  `json:"sample_rate,omitempty"`
 	NumChannels int32  `json:"num_channels,omitempty"`
-	// AutoStart controls whether the ffmpeg stream starts automatically on
-	// construction. When false, the component sits idle until a DoCommand
-	// {"command": "start"} is received. Defaults to true.
-	AutoStart *bool `json:"auto_start,omitempty"`
 }
 
 // Validate ensures VideoPath is set
@@ -109,24 +105,13 @@ func newAudioReplayAudio(
 		subscribers: map[int]chan *audioin.AudioChunk{},
 	}
 
-	if autoStart(conf) {
-		if err := a.openAndStartLoop(conf); err != nil {
-			cancelFunc()
-			return nil, fmt.Errorf("failed to start ffmpeg at creation: %w", err)
-		}
-	} else {
-		logger.Infof("[newAudioReplayAudio] auto_start=false; waiting for DoCommand start")
+	if err := a.openAndStartLoop(conf); err != nil {
+		cancelFunc()
+		return nil, fmt.Errorf("failed to start ffmpeg at creation: %w", err)
 	}
 
 	logger.Infof("[newAudioReplayAudio] AudioIn constructed successfully: %q", a.name)
 	return a, nil
-}
-
-func autoStart(conf *Config) bool {
-	if conf.AutoStart == nil {
-		return true
-	}
-	return *conf.AutoStart
 }
 
 // openAndStartLoop launches ffmpeg to extract PCM16 audio from the video,
@@ -312,9 +297,7 @@ func (a *audioReplayAudio) Properties(ctx context.Context, extra map[string]inte
 	}, nil
 }
 
-// Reconfigure updates stored config and restarts the ffmpeg stream only if
-// it was already running (so an explicit "stop" via DoCommand survives a
-// reconfigure). Stopped streams respect auto_start on the new config.
+// Reconfigure updates stored config and restarts the ffmpeg stream.
 func (a *audioReplayAudio) Reconfigure(
 	ctx context.Context,
 	deps resource.Dependencies,
@@ -326,18 +309,10 @@ func (a *audioReplayAudio) Reconfigure(
 	if err != nil {
 		return err
 	}
-
-	a.procMutex.Lock()
-	wasRunning := a.ffmpegCmd != nil
-	a.procMutex.Unlock()
-
 	a.cfg = newConf
 
-	shouldRun := wasRunning || (!wasRunning && autoStart(newConf))
-	if shouldRun {
-		if err := a.openAndStartLoop(newConf); err != nil {
-			return fmt.Errorf("reconfigure: %w", err)
-		}
+	if err := a.openAndStartLoop(newConf); err != nil {
+		return fmt.Errorf("reconfigure: %w", err)
 	}
 	return nil
 }
