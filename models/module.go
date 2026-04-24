@@ -228,7 +228,9 @@ func (a *audioReplayAudio) audioUpdateLoop(ctx context.Context, stdout io.Reader
 			return
 		}
 
-		now := time.Now()
+		// Stream-position timestamps: nanoseconds since this ffmpeg run started.
+		// Consumers divide by 1e9 to get "seconds since playback began".
+		startNs := int64(sequence) * chunkDurationNs
 		chunk := &audioin.AudioChunk{
 			AudioData: buf,
 			AudioInfo: &rutils.AudioInfo{
@@ -236,8 +238,8 @@ func (a *audioReplayAudio) audioUpdateLoop(ctx context.Context, stdout io.Reader
 				SampleRateHz: sampleRate,
 				NumChannels:  numChannels,
 			},
-			StartTimestampNanoseconds: now.UnixNano(),
-			EndTimestampNanoseconds:   now.UnixNano() + chunkDurationNs,
+			StartTimestampNanoseconds: startNs,
+			EndTimestampNanoseconds:   startNs + chunkDurationNs,
 			Sequence:                  sequence,
 		}
 		a.broadcast(chunk)
